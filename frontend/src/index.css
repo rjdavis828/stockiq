@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+:root[data-theme='dark'] {
+  --bg: #0b0d13;
+  --surface: #111420;
+  --surface2: #181c2c;
+  --border: #232840;
+  --text: #e2e6f0;
+  --text2: #6e7a9a;
+  --green: #1ec97a;
+  --red: #f05252;
+  --accent: #5e8df5;
+  --accent-soft: #5e8df522;
+  --green-bg: #1ec97a18;
+  --red-bg: #f0525218;
+}
+
+:root[data-theme='light'] {
+  --bg: #edf0f5;
+  --surface: #ffffff;
+  --surface2: #f3f5fa;
+  --border: #dde2ef;
+  --text: #0f1220;
+  --text2: #5a6282;
+  --green: #15a355;
+  --red: #dc2626;
+  --accent: #3b6ef0;
+  --accent-soft: #3b6ef015;
+  --green-bg: #15a35518;
+  --red-bg: #dc262618;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.mono {
+  font-family: 'Space Mono', ui-monospace, monospace;
+}
+
+.table-row {
+  transition: background 0.12s;
+}
+.table-row:hover {
+  background: var(--surface2);
+}
+
+.nav-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.chip:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.mover-row:hover {
+  background: var(--surface2);
+}
+
+.remove-btn:hover {
+  background: var(--red-bg) !important;
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  outline: none;
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e7a9a'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px !important;
+}
