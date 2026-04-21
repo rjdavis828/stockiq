@@ -1,0 +1,7 @@
+[
+  { "name": "S&P 500",    "value": 5321.41,  "change":  0.63 },
+  { "name": "NASDAQ",     "value": 16742.39, "change":  1.12 },
+  { "name": "DOW",        "value": 39127.80, "change":  0.28 },
+  { "name": "VIX",        "value": 14.82,    "change": -3.10 },
+  { "name": "Russell 2K", "value": 2063.14,  "change": -0.41 }
+]
