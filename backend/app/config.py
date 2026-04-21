@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     polygon_api_key: str = ""
     alpha_vantage_api_key: str = ""
+    finnhub_api_key: str = ""
+
+    yfinance_chunk_size: int = 100
+    yfinance_chunk_sleep: float = 5.0
+    finnhub_hotlist_max: int = 50
+    ws_stale_threshold_s: int = 90
 
     ingest_universe: str = "SP500"
     backfill_years: int = 5

@@ -36,11 +36,31 @@ export async function apiFetch<T>(
     ...options,
   });
 
-  if (!res.ok) {
-    throw new Error(`API error: ${res.statusText}`);
+  if (res.status === 401) {
+    localStorage.removeItem('access_token');
+    if (window.location.pathname !== '/login') {
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.assign(`/login?next=${next}`);
+    }
+    throw new Error('Unauthorized');
   }
 
+  if (!res.ok) {
+    const body = await res.text().catch(() => res.statusText);
+    throw new Error(`API error ${res.status}: ${body || res.statusText}`);
+  }
+
+  if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+export function isAuthenticated(): boolean {
+  return !!localStorage.getItem('access_token');
+}
+
+export function logout() {
+  localStorage.removeItem('access_token');
+  window.location.assign('/login');
 }
 
 export type ApiQueryOptions<T> = Omit<

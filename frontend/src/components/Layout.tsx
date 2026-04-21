@@ -1,8 +1,9 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { useStore } from '../store';
-import { useTickers } from '../api/hooks';
-import { Moon, Sun, LayoutGrid, Filter, Bell, X } from 'lucide-react';
+import { useTickers, useChangePassword, useCurrentUser } from '../api/hooks';
+import { logout } from '../api/client';
+import { Moon, Sun, LayoutGrid, Filter, Bell, X, Settings, LogOut, KeyRound, Zap } from 'lucide-react';
 
 const INDICES = [
   { name: 'S&P 500',   value: 5248.30,   change:  0.42 },
@@ -12,17 +13,44 @@ const INDICES = [
   { name: '10Y Yield', value: 4.32,      change:  0.05, suffix: '%' },
 ];
 
-const navItems = [
+const BASE_NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/scanner', label: 'Screener', icon: Filter, end: false },
   { to: '/alerts', label: 'Alerts', icon: Bell, end: false },
+  { to: '/hotlist', label: 'Hot List', icon: Zap, end: false },
 ];
+
+const ADMIN_NAV = { to: '/admin', label: 'Admin', icon: Settings, end: false };
 
 export default function Layout() {
   const { watchlist, darkMode, toggleDarkMode, pendingAlerts, clearPendingAlerts } = useStore();
+  const { data: currentUser } = useCurrentUser();
+  const navItems = currentUser?.is_superuser ? [...BASE_NAV, ADMIN_NAV] : BASE_NAV;
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const changePassword = useChangePassword();
+
+  async function handleChangePw(e: FormEvent) {
+    e.preventDefault();
+    setPwError(null);
+    if (newPw.length < 8) { setPwError('Password must be at least 8 characters'); return; }
+    if (newPw !== confirmPw) { setPwError('Passwords do not match'); return; }
+    try {
+      await changePassword.mutateAsync(newPw);
+      setPwSuccess(true);
+      setNewPw('');
+      setConfirmPw('');
+      setTimeout(() => { setPwOpen(false); setPwSuccess(false); }, 1500);
+    } catch {
+      setPwError('Failed to update password');
+    }
+  }
   const { data: searchData } = useTickers({ limit: 500 });
   const q = search.trim().toLowerCase();
   const searchResults =
@@ -309,6 +337,90 @@ export default function Layout() {
           >
             {darkMode ? <Sun size={15} /> : <Moon size={15} />}
           </button>
+          <button
+            onClick={() => { setPwOpen(true); setPwError(null); setPwSuccess(false); }}
+            aria-label="Change password"
+            title="Change password"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 7,
+              color: 'var(--text2)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <KeyRound size={15} />
+          </button>
+          <button
+            onClick={logout}
+            aria-label="Sign out"
+            title="Sign out"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: 7,
+              color: 'var(--text2)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <LogOut size={15} />
+          </button>
+
+          {pwOpen && (
+            <div
+              style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500,
+              }}
+              onClick={(e) => { if (e.target === e.currentTarget) setPwOpen(false); }}
+            >
+              <form
+                onSubmit={handleChangePw}
+                style={{
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 10, padding: 24, width: 320, display: 'flex',
+                  flexDirection: 'column', gap: 14,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>Change Password</span>
+                  <button type="button" onClick={() => setPwOpen(false)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', padding: 0 }}>
+                    <X size={14} />
+                  </button>
+                </div>
+                <label style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 600 }}>
+                  NEW PASSWORD
+                  <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
+                    required autoFocus style={pwInputStyle} />
+                </label>
+                <label style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 600 }}>
+                  CONFIRM PASSWORD
+                  <input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
+                    required style={pwInputStyle} />
+                </label>
+                {pwError && <div style={{ fontSize: 12, color: 'var(--red)' }}>{pwError}</div>}
+                {pwSuccess && <div style={{ fontSize: 12, color: 'var(--green)' }}>Password updated!</div>}
+                <button type="submit" disabled={changePassword.isPending}
+                  style={{
+                    padding: '9px 14px', borderRadius: 6, border: 'none',
+                    background: 'var(--accent)', color: '#fff', fontWeight: 600,
+                    fontSize: 13, cursor: changePassword.isPending ? 'not-allowed' : 'pointer',
+                    opacity: changePassword.isPending ? 0.7 : 1,
+                  }}>
+                  {changePassword.isPending ? 'Saving…' : 'Update Password'}
+                </button>
+              </form>
+            </div>
+          )}
         </header>
 
         <main style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
@@ -361,3 +473,16 @@ export default function Layout() {
     </div>
   );
 }
+
+const pwInputStyle: React.CSSProperties = {
+  marginTop: 6,
+  width: '100%',
+  background: 'var(--surface2)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  color: 'var(--text)',
+  fontSize: 13,
+  padding: '8px 10px',
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
+};

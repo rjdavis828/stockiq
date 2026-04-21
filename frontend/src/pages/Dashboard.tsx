@@ -1,16 +1,10 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useTickers, useDailyBars, Ticker } from '../api/hooks';
 import { useStore } from '../store';
 import { Sparkline } from '../components/Sparkline';
-
-const INDICES = [
-  { name: 'S&P 500',   value: 5248.30,   change:  0.42 },
-  { name: 'Nasdaq',    value: 16429.55,  change:  0.81 },
-  { name: 'Dow Jones', value: 39215.80,  change:  0.12 },
-  { name: 'VIX',       value: 18.42,     change: -3.21 },
-  { name: '10Y Yield', value: 4.32,      change:  0.05, suffix: '%' },
-];
+import { useDashboardSummary, IndexSummary } from '../hooks/useDashboardSummary';
 
 const fmtCap = (raw: string) => {
   const n = Number(raw);
@@ -20,6 +14,11 @@ const fmtCap = (raw: string) => {
   return `$${(n / 1e6).toFixed(0)}M`;
 };
 
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+}
+
 function WatchlistSparkline({ symbol }: { symbol: string }) {
   const { data } = useDailyBars(symbol, { limit: 30 });
   const prices = data?.map((b) => b.close) ?? [];
@@ -27,10 +26,106 @@ function WatchlistSparkline({ symbol }: { symbol: string }) {
   return <Sparkline data={prices} color={positive ? 'var(--green)' : 'var(--red)'} />;
 }
 
+// Skeleton card for loading state
+function IndexSkeleton() {
+  return (
+    <div className="card" style={{ padding: '14px 16px' }}>
+      <style>{`
+        @keyframes skeletonPulse {
+          0%, 100% { background-color: var(--surface2); }
+          50%       { background-color: var(--border); }
+        }
+        .skeleton-line { border-radius: 3px; animation: skeletonPulse 1.4s ease-in-out infinite; }
+      `}</style>
+      <div className="skeleton-line" style={{ height: 11, width: '60%', marginBottom: 10 }} />
+      <div className="skeleton-line" style={{ height: 16, width: '80%', marginBottom: 7 }} />
+      <div className="skeleton-line" style={{ height: 12, width: '40%' }} />
+    </div>
+  );
+}
+
+// Index card with flash-on-change
+function IndexCard({ idx }: { idx: IndexSummary }) {
+  const prevValueRef = useRef<number | null>(null);
+  const [flashColor, setFlashColor] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (prevValueRef.current !== null && prevValueRef.current !== idx.value) {
+      const color = idx.value > prevValueRef.current ? 'var(--green)' : 'var(--red)';
+      setFlashColor(color);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setFlashColor(null), 600);
+    }
+    prevValueRef.current = idx.value;
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [idx.value]);
+
+  return (
+    <div className="card" style={{ padding: '14px 16px' }}>
+      <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6, letterSpacing: '0.05em' }}>{idx.name}</div>
+      <div
+        className="mono"
+        style={{
+          fontSize: 16,
+          fontWeight: 600,
+          color: flashColor ?? 'var(--text)',
+          marginBottom: 3,
+          transition: 'color 0.6s ease',
+        }}
+      >
+        {idx.value.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+      </div>
+      <div className="mono" style={{ fontSize: 12, color: idx.change >= 0 ? 'var(--green)' : 'var(--red)' }}>
+        {idx.change >= 0 ? '+' : ''}{idx.change.toFixed(2)}%
+      </div>
+    </div>
+  );
+}
+
+// Status bar live indicator
+function LiveIndicator({ loading, error }: { loading: boolean; error: Error | null }) {
+  const [showLive, setShowLive] = useState(false);
+  const prevLoadingRef = useRef(loading);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (prevLoadingRef.current && !loading && !error) {
+      setShowLive(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setShowLive(false), 2000);
+    }
+    prevLoadingRef.current = loading;
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [loading, error]);
+
+  if (error) return <span style={{ color: 'var(--red)', fontSize: 12 }}>⚠ Stale</span>;
+  if (loading) return <span style={{ fontSize: 12, color: 'var(--text2)' }}>↻ refreshing…</span>;
+  return (
+    <span
+      style={{
+        fontSize: 12,
+        color: showLive ? 'var(--green)' : 'var(--text2)',
+        transition: 'color 2s ease',
+      }}
+    >
+      ✓ Live
+    </span>
+  );
+}
+
+const STATUS_CONFIG = {
+  open:   { dot: 'var(--green)',  label: 'Market Open'  },
+  closed: { dot: 'var(--text2)', label: 'Market Closed' },
+  pre:    { dot: '#f59e0b',       label: 'Pre-Market'   },
+  post:   { dot: '#f59e0b',       label: 'After Hours'  },
+};
+
 export default function Dashboard() {
-  const { data, isLoading } = useTickers({ limit: 50 });
+  const { data: tickerData, isLoading } = useTickers({ limit: 50 });
   const { watchlist, addWatchlist, removeWatchlist } = useStore();
   const watchSet = new Set(watchlist.map((w) => w.symbol));
+  const { data: summary, loading: summaryLoading, error: summaryError } = useDashboardSummary();
 
   if (isLoading) {
     return (
@@ -40,7 +135,7 @@ export default function Dashboard() {
     );
   }
 
-  const items = data?.items ?? [];
+  const items = tickerData?.items ?? [];
   const watchTickers = items.filter((t) => watchSet.has(t.symbol));
   const byCapDesc = [...items].sort((a, b) => Number(b.market_cap) - Number(a.market_cap));
   const topCap = byCapDesc.slice(0, 4);
@@ -49,22 +144,34 @@ export default function Dashboard() {
     .sort((a, b) => Number(a.market_cap) - Number(b.market_cap))
     .slice(0, 4);
 
+  const statusCfg = STATUS_CONFIG[summary?.market_status ?? 'closed'];
+  const totalStocks = summary?.total_stocks ?? items.length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '28px 32px', minHeight: '100%' }}>
 
+      {/* Status bar */}
+      <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusCfg.dot, display: 'inline-block', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 500 }}>{statusCfg.label}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {summary?.last_updated && (
+            <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+              Last updated&nbsp;&nbsp;{fmtTime(summary.last_updated)}
+            </span>
+          )}
+          <LiveIndicator loading={summaryLoading} error={summaryError} />
+        </div>
+      </div>
+
       {/* Market indices cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
-        {INDICES.map((idx) => (
-          <div key={idx.name} className="card" style={{ padding: '14px 16px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6, letterSpacing: '0.05em' }}>{idx.name}</div>
-            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>
-              {idx.value.toLocaleString('en-US', { minimumFractionDigits: 2 })}{idx.suffix || ''}
-            </div>
-            <div className="mono" style={{ fontSize: 12, color: idx.change >= 0 ? 'var(--green)' : 'var(--red)' }}>
-              {idx.change >= 0 ? '+' : ''}{idx.change.toFixed(2)}%
-            </div>
-          </div>
-        ))}
+        {summaryLoading && !summary
+          ? Array.from({ length: 5 }).map((_, i) => <IndexSkeleton key={i} />)
+          : (summary?.indices ?? []).map((idx) => <IndexCard key={idx.name} idx={idx} />)
+        }
       </div>
 
       {/* Watchlist + Movers */}
@@ -150,7 +257,7 @@ export default function Dashboard() {
       <div className="card" style={{ overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>All Stocks</span>
-          <span style={{ fontSize: 12, color: 'var(--text2)' }}>{items.length} companies</span>
+          <span style={{ fontSize: 12, color: 'var(--text2)' }}>{totalStocks} companies</span>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>

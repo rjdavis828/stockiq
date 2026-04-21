@@ -179,3 +179,15 @@ class AlertEvent(Base):
     notified_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     alert: Mapped["Alert"] = relationship(back_populates="events")
+
+
+class JobConfig(Base):
+    __tablename__ = "job_configs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    job_name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    universe_filter: Mapped[str] = mapped_column(String(32), default="SP500", nullable=False)
+    cron_schedule: Mapped[str | None] = mapped_column(String(128))
+    extra_config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)

@@ -11,6 +11,9 @@ from app.ingestion.providers.base import OHLCVBar, TickerInfo
 logger = logging.getLogger(__name__)
 
 
+_TICKER_UPSERT_CHUNK = 1000  # 8 cols × 1000 = 8000 params, well under asyncpg's 32767 limit
+
+
 async def upsert_tickers(session: AsyncSession, ticker_infos: list[TickerInfo]) -> int:
     if not ticker_infos:
         return 0
@@ -29,20 +32,23 @@ async def upsert_tickers(session: AsyncSession, ticker_infos: list[TickerInfo]) 
         for t in ticker_infos
     ]
 
-    stmt = insert(Ticker).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["symbol"],
-        set_={
-            "name": stmt.excluded.name,
-            "exchange": stmt.excluded.exchange,
-            "sector": stmt.excluded.sector,
-            "industry": stmt.excluded.industry,
-            "market_cap": stmt.excluded.market_cap,
-            "active": stmt.excluded.active,
-            "updated_at": stmt.excluded.updated_at,
-        },
-    )
-    await session.execute(stmt)
+    for i in range(0, len(rows), _TICKER_UPSERT_CHUNK):
+        chunk = rows[i : i + _TICKER_UPSERT_CHUNK]
+        stmt = insert(Ticker).values(chunk)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol"],
+            set_={
+                "name": stmt.excluded.name,
+                "exchange": stmt.excluded.exchange,
+                "sector": stmt.excluded.sector,
+                "industry": stmt.excluded.industry,
+                "market_cap": stmt.excluded.market_cap,
+                "active": stmt.excluded.active,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+        await session.execute(stmt)
+
     await session.commit()
     logger.info("Upserted %d tickers", len(rows))
     return len(rows)

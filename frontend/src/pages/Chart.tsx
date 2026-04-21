@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { createChart, ColorType, IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import { useDailyBars, useFundamentals, useIntradayBars, useTickerDetail } from '../api/hooks';
 import { useStore } from '../store';
-import { useWebSocket, type LiveBar } from '../hooks/useWebSocket';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const DAILY_TIMEFRAMES: Record<string, number> = {
   '1M': 21,
@@ -59,31 +59,34 @@ export default function Chart() {
   const inWatch = !!ticker && watchlist.some((w) => w.symbol === ticker.symbol);
 
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null>(null);
+  const chartTypeRef = useRef(chartType);
+  chartTypeRef.current = chartType;
 
   useWebSocket({
     symbol: symbol || '',
-    enabled: isIntraday,
-    onBar: (bar: LiveBar) => {
-      if (!seriesRef.current) return;
-      const time = Math.floor(new Date(bar.ts).getTime() / 1000) as UTCTimestamp;
-      if (chartType === 'candle') {
-        (seriesRef.current as ISeriesApi<'Candlestick'>).update({
+    enabled: !!symbol && isIntraday,
+    onBar: (msg: { ts: string; open: number; high: number; low: number; close: number }) => {
+      const series = seriesRef.current;
+      if (!series) return;
+      const time = Math.floor(new Date(msg.ts).getTime() / 1000) as UTCTimestamp;
+      if (chartTypeRef.current === 'candle') {
+        (series as ISeriesApi<'Candlestick'>).update({
           time,
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
+          open: msg.open,
+          high: msg.high,
+          low: msg.low,
+          close: msg.close,
         });
       } else {
-        (seriesRef.current as ISeriesApi<'Line'>).update({ time, value: bar.close });
+        (series as ISeriesApi<'Line'>).update({ time, value: msg.close });
       }
     },
   });
 
   const sliceData = useMemo(() => {
     if (!bars) return [];
-    if (isIntraday) return bars;
-    return bars.slice(-DAILY_TIMEFRAMES[timeframe]);
+    if (isIntraday) return [...bars].reverse();
+    return bars.slice(0, DAILY_TIMEFRAMES[timeframe]).reverse();
   }, [bars, timeframe, isIntraday]);
 
   const latest = sliceData[sliceData.length - 1];
@@ -92,8 +95,8 @@ export default function Chart() {
   const changePct = latest && first && first.close ? (change / first.close) * 100 : 0;
   const positive = change >= 0;
 
-  const high52 = bars?.length ? Math.max(...bars.slice(-252).map((b) => b.high)) : null;
-  const low52 = bars?.length ? Math.min(...bars.slice(-252).map((b) => b.low)) : null;
+  const high52 = dailyBars?.length ? Math.max(...dailyBars.slice(0, 252).map((b) => b.high)) : null;
+  const low52 = dailyBars?.length ? Math.min(...dailyBars.slice(0, 252).map((b) => b.low)) : null;
   const rangePos =
     latest && high52 != null && low52 != null && high52 !== low52
       ? ((latest.close - low52) / (high52 - low52)) * 100
@@ -101,7 +104,6 @@ export default function Chart() {
 
   const chartContainer = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  // seriesRef is defined above alongside useWebSocket
 
   useEffect(() => {
     if (!chartContainer.current || sliceData.length === 0) return;
@@ -171,7 +173,7 @@ export default function Chart() {
     };
   }, [sliceData, chartType, darkMode, isIntraday]);
 
-  if (tickerLoading || barsLoading) {
+  if (tickerLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <Loader2 className="animate-spin" color="var(--text2)" />
@@ -356,7 +358,11 @@ export default function Chart() {
           </div>
         </div>
         <div style={{ padding: '8px 8px 4px' }}>
-          {sliceData.length === 0 ? (
+          {barsLoading ? (
+            <div style={{ height: 340, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Loader2 className="animate-spin" color="var(--text2)" />
+            </div>
+          ) : sliceData.length === 0 ? (
             <div
               style={{
                 height: 340,
@@ -367,7 +373,7 @@ export default function Chart() {
                 fontSize: 13,
               }}
             >
-              No price data available.
+              {isIntraday ? 'No intraday data available for this timeframe.' : 'No price data available.'}
             </div>
           ) : (
             <div ref={chartContainer} style={{ width: '100%', height: 340 }} />

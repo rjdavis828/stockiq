@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, alerts, fundamentals, ohlcv, scans, tickers, ws as ws_routes
+from app.api.routes import admin, alerts, dashboard, fundamentals, hotlist, ohlcv, scans, tickers, ws as ws_routes
 from app.auth import auth_backend, fastapi_users
 from app.config import settings
 from app.schemas.auth import UserCreate, UserRead, UserUpdate
@@ -46,11 +46,13 @@ app.include_router(
 )
 
 # --- Domain routes ---
+app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(tickers.router, prefix="/api/v1")
 app.include_router(ohlcv.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(fundamentals.router, prefix="/api/v1")
+app.include_router(hotlist.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(ws_routes.router)
 

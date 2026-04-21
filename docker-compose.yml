@@ -1,5 +1,6 @@
 services:
   postgres:
+    restart: unless-stopped
     image: timescale/timescaledb-ha:pg16
     environment:
       POSTGRES_USER: stock
@@ -16,6 +17,7 @@ services:
       retries: 10
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -28,9 +30,13 @@ services:
       retries: 5
 
   api:
+    restart: unless-stopped
     build:
       context: ./backend
       dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "8000:8000"
     environment:
@@ -46,12 +52,19 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      sh -c "alembic upgrade head &&
+             python scripts/seed_users.py &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   worker:
+    restart: unless-stopped
     build:
       context: ./backend
       dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       DATABASE_URL: postgresql+asyncpg://stock:password@postgres:5432/stockdb
       DATABASE_URL_SYNC: postgresql://stock:password@postgres:5432/stockdb
@@ -67,7 +80,31 @@ services:
       - ./backend:/app
     command: celery -A celery_worker worker --beat --loglevel=info
 
+  ws_worker:
+    restart: unless-stopped
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    environment:
+      DATABASE_URL: postgresql+asyncpg://stock:password@postgres:5432/stockdb
+      DATABASE_URL_SYNC: postgresql://stock:password@postgres:5432/stockdb
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: python -m app.tasks.ws_run
+
   frontend:
+    restart: unless-stopped
     build:
       context: ./frontend
       dockerfile: Dockerfile
