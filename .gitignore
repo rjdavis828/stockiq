@@ -83,3 +83,6 @@ design_docs/
 
 # Claude
 .claude/
+
+# Project plan
+PROJECT_PLAN.md
